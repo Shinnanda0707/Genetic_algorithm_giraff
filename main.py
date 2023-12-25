@@ -2,7 +2,10 @@ from random import choice, choices
 import time
 
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
+heights = list()
+fitnesses = list()
 
 class Giraff:
     def __init__(self, height=None):
@@ -10,51 +13,47 @@ class Giraff:
         self.fitness = 0
 
 
-def set_map(map_size_x, map_size_y, averages):
-    maps = np.zeros((4, map_size_x, map_size_y))
-    for i in averages:
-        maps[i // 10 - 1] = np.random.randn(map_size_x, map_size_y) + i
-    return maps
-
-
 # Initial variables
 n = 1225
 k = 50
-threshold = 3000
 max_height, min_height = 50, 1
-map_size_x, map_size_y = 50, 50
+map_size = 20000
 margin = 5
 weights = [60, 35, 5]
-averages = np.array(range(10, 41, 10))
+average = 45
 it = 200
 
 # Set initial state
 individual = np.full(n, Giraff)
-for i in range(individual.size):
-    individual[i] = Giraff(np.random.randint(min_height, max_height))
+height_dt = np.random.rand(n) + 12.8 # Activate when Experiment 2
+for i in range(n):
+    individual[i] = Giraff(height_dt[i])
 
 # Evolution
 max_fitness = [0, 0]
 iteration = 0
 heights = list()
 fitnesses = list()
-# while max_fitness[1] < threshold:
-for i in range(it):
+
+tb = SummaryWriter()
+for _ in range(it):
     st = time.time()
+    total_height, total_fitness = 0, 0
+
     # Reset map
-    maps = np.zeros((4, map_size_x, map_size_y))
-    for i in range(averages.size):
-        maps[i] = np.random.randn(map_size_x, map_size_y) + averages[i]
+    map = np.random.randn(map_size) + average
 
     # Calculate fitness of each individual
-    for i in range(individual.size):
+    for i in range(n):
         fitness = 0
-        for map in maps:
-            for x in map:
-                for element in x:
-                    if (individual[i].height - margin <= element) and (element <= individual[i].height + margin):
-                        fitness += 1
+        for element in map:
+            if (individual[i].height - margin <= element) and (element <= individual[i].height + margin):
+                fitness += 1
         individual[i].fitness = fitness
+        total_height += individual[i].height
+        total_fitness += fitness
+    total_height /= n
+    total_fitness /= n
     
     # Select top k individuals
     selected = np.array(sorted(individual, key=lambda indv: indv.fitness)[::-1])
@@ -74,16 +73,19 @@ for i in range(it):
 
     heights.append(max_fitness[0])
     fitnesses.append(max_fitness[1])
-    print(iteration)
+
+    tb.add_scalar("Best Fitness Height", max_fitness[0], iteration)
+    tb.add_scalar("Best Fitness", max_fitness[1], iteration)
+    tb.add_scalar("Average Height", total_height, iteration)
+    tb.add_scalar("Average Fitness", total_fitness, iteration)
+
     et = round(time.time() - st)
-    print(f"Epoch: {i + 1}, took {et // 60}min {et % 60}sec")
+    print(f"Epoch: {iteration}, took {et // 60}min {et % 60}sec")
+
+tb.close()
 print(f"{'=' * 30}[Final Model Summary]{'=' * 30}")
 print(f"| Fitness:   {max_fitness[1]}")
 print(f"| Height:    {max_fitness[0]}")
 print(f"| Iteration: {iteration}")
 print("=" * 81)
-
-with open("data.txt", "a", encoding="UTF-8") as f:
-    for i in range(iteration):
-        f.write(f"{heights[i]} {fitnesses[i]}\n")
-    f.close()
+print(total_height)
